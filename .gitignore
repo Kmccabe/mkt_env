@@ -1,0 +1,63 @@
+# -------------------------
+# Python
+# -------------------------
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+*.manifest
+*.spec
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_save
+
+# Pytest & mypy caches
+.pytest_cache/
+.mypy_cache/
+
+# Logs
+*.log
+
+# -------------------------
+# Node / Frontend
+# -------------------------
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+package-lock.json
+yarn.lock
+.pnpm-debug.log
+
+# Build output
+dist/
+build/
+.cache/
+.next/
+out/
+
+# -------------------------
+# IDE / Editor
+# -------------------------
+.vscode/
+.cursor/
+.idea/
+*.swp
+*.swo
+
+# -------------------------
+# OS Specific
+# -------------------------
+.DS_Store
+Thumbs.db

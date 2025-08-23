@@ -205,4 +205,4 @@ Check that both servers are running:
 
 ## License
 
-This project is for educational purposes. Feel free to modify and extend the market simulation logic.
+This project is licensed under the [MIT License](LICENSE).

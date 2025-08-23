@@ -1,239 +1,157 @@
 """
 Market logic module for supply and demand calculations.
 
-This module contains pure functions for:
-- Building random buyers and sellers with specified parameters or segments
-- Sorting buyers into demand schedule (high to low WTP)
-- Sorting sellers into supply schedule (low to high cost)
-- Finding equilibrium quantity and price by matching buyers and sellers
-- Calculating maximum total surplus (area between curves up to Q*)
-
-All functions are pure (no side effects) and include type hints for clarity.
+Pure functions for:
+- Building buyers/sellers from segments or simple params (integers only)
+- Sorting into demand (desc) and supply (asc)
+- Finding equilibrium (Q*, P*) by matching
+- Computing maximum total surplus up to Q*
 """
 
 import random
-from typing import List, Tuple, Optional
-from .models import MarketParams, Segment
+from .models import MarketParams, Segment  # Segment: n, p_min, p_max, dist ('uniform'|'normal'), mean, sd
 
 
-def sample_from_segments(segments: List[Segment], rng: random.Random) -> List[int]:
-    """Sample integer values from market segments based on their distribution parameters.
-    
-    Args:
-        segments: List of segments with n, p_min, p_max, and distribution parameters
-        rng: Random number generator instance
-    
-    Returns:
-        List of sampled integer values from all segments combined
+# ---- helpers -----------------------------------------------------------------
+
+def _validate_segment(seg: Segment) -> None:
+    if seg.n < 0:
+        raise ValueError("Segment.n must be >= 0")
+    if seg.p_min > seg.p_max:
+        raise ValueError("Segment p_min must be <= p_max")
+    if seg.dist not in ("uniform", "normal"):
+        raise ValueError("Segment.dist must be 'uniform' or 'normal'")
+
+
+def _clamp_int(x: float, lo: int, hi: int) -> int:
+    """Round symmetrically, then clamp to inclusive bounds."""
+    xi = int(round(x))
+    if xi < lo:
+        return lo
+    if xi > hi:
+        return hi
+    return xi
+
+
+# ---- sampling ----------------------------------------------------------------
+
+def sample_from_segments(segments: list[Segment], rng: random.Random) -> list[int]:
     """
-    vals: List[int] = []
+    Sample integer values from market segments using the provided RNG.
+    Uses 'uniform' or 'normal' per segment; normal draws are clamped and rounded.
+    """
+    vals: list[int] = []
     for seg in segments:
+        _validate_segment(seg)
+        span = seg.p_max - seg.p_min
+
         if seg.dist == "uniform":
-            # Uniform distribution within segment bounds, converted to integers
+            # Deterministic: use injected RNG
             for _ in range(seg.n):
-                # Generate random integer
-                int_val = random.randint(seg.p_min, seg.p_max)
-                vals.append(int_val)
-        else:  # "normal" distribution
-            # Calculate mean and standard deviation if not provided
+                vals.append(rng.randint(seg.p_min, seg.p_max))  # inclusive
+        else:  # "normal"
             mean = seg.mean if seg.mean is not None else (seg.p_min + seg.p_max) / 2
-            sd = seg.sd if seg.sd is not None else (seg.p_max - seg.p_min) / 6 or 1.0
-            
-            # Sample from normal distribution, clamp to segment bounds, and convert to integer
+            # If sd is given, use it; else fall back to span/6 (≈95% within bounds), min 1.0
+            sigma = float(seg.sd) if seg.sd is not None else max(1.0, span / 6.0)
             for _ in range(seg.n):
-                x = rng.gauss(mean, sd)
-                x = min(max(x, seg.p_min), seg.p_max)  # Clamp to [p_min, p_max]
-                int_val = round(x)
-                # Ensure the value stays within bounds after rounding
-                int_val = max(seg.p_min, min(seg.p_max, int_val))
-                vals.append(int_val)
+                x = rng.gauss(mean, sigma)
+                vals.append(_clamp_int(x, seg.p_min, seg.p_max))
     return vals
 
 
-def build_buyers_and_sellers(params: MarketParams) -> Tuple[List[int], List[int]]:
-    """Build buyers and sellers based on parameters or segments.
-    
-    If segments are provided, they take precedence over simple parameters.
-    Otherwise, falls back to legacy simple parameter generation.
-    
-    Args:
-        params: Market parameters (may include segments or simple params)
-    
-    Returns:
-        Tuple of (buyers_sorted, sellers_sorted) where both are sorted appropriately
+# ---- construction -------------------------------------------------------------
+
+def build_buyers_and_sellers(params: MarketParams) -> tuple[list[int], list[int]]:
+    """
+    Build buyers and sellers from either segments (preferred) or simple params (legacy).
+    Returns (buyers_sorted_desc, sellers_sorted_asc).
     """
     rng = random.Random(params.seed)
-    
-    # Build buyers from segments if provided, otherwise from simple params
-    if params.buyer_segments and len(params.buyer_segments) > 0:
+
+    if params.buyer_segments:
         buyers = sample_from_segments(params.buyer_segments, rng)
     else:
-        # Legacy simple parameter generation - generate integers
         buyers = [rng.randint(params.min_wtp, params.max_wtp) for _ in range(params.num_buyers)]
-    
-    # Build sellers from segments if provided, otherwise from simple params
-    if params.seller_segments and len(params.seller_segments) > 0:
+
+    if params.seller_segments:
         sellers = sample_from_segments(params.seller_segments, rng)
     else:
-        # Legacy simple parameter generation - generate integers
         sellers = [rng.randint(params.min_cost, params.max_cost) for _ in range(params.num_sellers)]
-    
-    # Sort buyers high to low (demand curve) and sellers low to high (supply curve)
-    buyers_sorted = sorted(buyers, reverse=True)
-    sellers_sorted = sorted(sellers)
-    
-    return buyers_sorted, sellers_sorted
+
+    return sorted(buyers, reverse=True), sorted(sellers)
 
 
-def build_buyers(num_buyers: int, min_wtp: int, max_wtp: int, seed: Optional[int] = None) -> List[int]:
-    """Create a list of buyers' willingness to pay (WTP) - LEGACY FUNCTION.
-    
-    This function is kept for backward compatibility but is deprecated.
-    Use build_buyers_and_sellers() with MarketParams instead.
-    
-    Args:
-        num_buyers: Number of buyers to create
-        min_wtp: Minimum WTP value (inclusive)
-        max_wtp: Maximum WTP value (inclusive)
-        seed: Random seed for reproducible results (optional)
-    
-    Returns:
-        List of buyer WTP values as integers
-    """
-    if seed is not None:
-        random.seed(seed)
-    
-    return [random.randint(min_wtp, max_wtp) for _ in range(num_buyers)]
+# ---- legacy builders (kept pure; no global seeding) --------------------------
+
+def build_buyers(num_buyers: int, min_wtp: int, max_wtp: int, seed: int | None = None) -> list[int]:
+    """LEGACY: Prefer build_buyers_and_sellers(). Pure: uses a local RNG."""
+    rng = random.Random(seed)
+    return [rng.randint(min_wtp, max_wtp) for _ in range(num_buyers)]
 
 
-def build_sellers(num_sellers: int, min_cost: int, max_cost: int, seed: Optional[int] = None) -> List[int]:
-    """Create a list of sellers' costs - LEGACY FUNCTION.
-    
-    This function is kept for backward compatibility but is deprecated.
-    Use build_buyers_and_sellers() with MarketParams instead.
-    
-    Args:
-        num_sellers: Number of sellers to create
-        min_cost: Minimum cost value (inclusive)
-        max_cost: Maximum cost value (inclusive)
-        seed: Random seed for reproducible results (optional)
-    
-    Returns:
-        List of seller cost values as integers
-    """
-    if seed is not None:
-        random.seed(seed)
-    
-    return [random.randint(min_cost, max_cost) for _ in range(num_sellers)]
+def build_sellers(num_sellers: int, min_cost: int, max_cost: int, seed: int | None = None) -> list[int]:
+    """LEGACY: Prefer build_buyers_and_sellers(). Pure: uses a local RNG."""
+    rng = random.Random(seed)
+    return [rng.randint(min_cost, max_cost) for _ in range(num_sellers)]
 
 
-def sort_demand(buyers_wtp: List[int]) -> List[int]:
-    """Return buyers sorted from highest WTP to lowest (demand curve).
-    
-    Args:
-        buyers_wtp: List of buyer WTP values
-    
-    Returns:
-        Demand schedule sorted high to low
-    """
+# ---- sorting helpers ----------------------------------------------------------
+
+def sort_demand(buyers_wtp: list[int]) -> list[int]:
+    """Sort WTP high→low."""
     return sorted(buyers_wtp, reverse=True)
 
 
-def sort_supply(sellers_cost: List[int]) -> List[int]:
-    """Return sellers sorted from lowest cost to highest (supply curve).
-    
-    Args:
-        sellers_cost: List of seller cost values
-    
-    Returns:
-        Supply schedule sorted low to high
-    """
+def sort_supply(sellers_cost: list[int]) -> list[int]:
+    """Sort costs low→high."""
     return sorted(sellers_cost)
 
 
-def find_equilibrium(demand: List[int], supply: List[int]) -> Tuple[int, float]:
-    """Find equilibrium quantity and price by matching buyers and sellers.
-    
-    We walk down the demand (high to low) and up the supply (low to high),
-    matching pairs while buyer WTP >= seller cost.
-    
-    - Equilibrium quantity (Q*) is the number of successful matches.
-    - Equilibrium price (P*) is the average of the marginal matched
-      buyer WTP and seller cost at Q*.
-    
-    If there is no trade (Q* == 0), we set price to the midpoint between the
-    highest WTP and lowest cost just for reference.
-    
-    Args:
-        demand: Demand schedule (sorted high to low)
-        supply: Supply schedule (sorted low to high)
-    
-    Returns:
-        Tuple of (equilibrium_quantity, equilibrium_price)
-    """
-    matches = 0
-    last_matched_wtp = None
-    last_matched_cost = None
+# ---- equilibrium & surplus ----------------------------------------------------
 
-    # Iterate pairwise until one list runs out
+def find_equilibrium(demand: list[int], supply: list[int]) -> tuple[int, float]:
+    matches = 0
+    last_wtp: int | None = None
+    last_cost: int | None = None
+
     for wtp, cost in zip(demand, supply):
         if wtp >= cost:
             matches += 1
-            last_matched_wtp = wtp
-            last_matched_cost = cost
+            last_wtp = wtp
+            last_cost = cost
         else:
-            # As soon as WTP < cost, further matches won't work because
-            # demand descends while supply ascends.
             break
 
     if matches == 0:
-        # No trade possible; set a reference price between highest WTP and lowest cost
-        ref_high_wtp = demand[0] if demand else 0
-        ref_low_cost = supply[0] if supply else 0
-        price = (ref_high_wtp + ref_low_cost) / 2 if (demand and supply) else 0.0
-        return 0, price
+        if demand and supply:
+            return 0, (demand[0] + supply[0]) / 2.0
+        if demand:
+            return 0, float(demand[0])
+        if supply:
+            return 0, float(supply[0])
+        return 0, 0.0
 
-    # Use midpoint between marginal matched WTP and cost as equilibrium price
-    price = (last_matched_wtp + last_matched_cost) / 2  # type: ignore
-    return matches, price
+    # If we consumed all comparable pairs (no cutoff encountered),
+    # price at the last matched pair midpoint (full-trade case).
+    n = min(len(demand), len(supply))
+    if matches == n:
+        return matches, (last_wtp + last_cost) / 2.0  # type: ignore
+
+    # Otherwise, price across the margin: next unmatched buyer vs last matched seller.
+    next_unmatched_buyer = demand[matches] if matches < len(demand) else last_wtp  # fallback
+    return matches, (next_unmatched_buyer + last_cost) / 2.0  # type: ignore
 
 
-def compute_total_surplus_max(demand: List[int], supply: List[int], q_star: int) -> float:
-    """Compute maximum total surplus (area between demand and supply curves up to Q*).
-    
-    Maximum total surplus is the discrete "area" between curves up to Q*:
-    TS_max = sum_{i=0..Q*-1} (demand[i] - supply[i])
-    
-    This represents the total economic welfare that would be created if all
-    transactions up to Q* occurred at the equilibrium price.
-    
-    Args:
-        demand: Demand schedule (sorted high to low)
-        supply: Supply schedule (sorted low to high)
-        q_star: Equilibrium quantity
-    
-    Returns:
-        Maximum total surplus as a float
-    """
-    if q_star == 0:
+def compute_total_surplus_max(demand: list[int], supply: list[int], q_star: int) -> float:
+    """Sum of (demand[i] - supply[i]) for i=0..q*-1 (discrete area between curves)."""
+    if q_star <= 0:
         return 0.0
-    
-    # Sum the differences between demand and supply prices up to Q*
-    surplus = 0.0
-    for i in range(q_star):
-        if i < len(demand) and i < len(supply):
-            surplus += demand[i] - supply[i]
-    
-    return surplus
+    n = min(q_star, len(demand), len(supply))
+    return float(sum(demand[i] - supply[i] for i in range(n)))
 
 
-def create_schedule_table(values: List[int]) -> List[dict]:
-    """Create a step-function schedule table from sorted values.
-    
-    Args:
-        values: Sorted list of values (demand or supply)
-    
-    Returns:
-        List of dicts with "q" (quantity) and "p" (price) keys
-    """
-    return [{"q": i + 1, "p": value} for i, value in enumerate(values)]
+# ---- tables ------------------------------------------------------------------
+
+def create_schedule_table(values: list[int]) -> list[dict]:
+    """Create step schedule as [{q, p}]. Assumes 'values' already sorted appropriately."""
+    return [{"q": i + 1, "p": v} for i, v in enumerate(values)]

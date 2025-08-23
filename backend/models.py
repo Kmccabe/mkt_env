@@ -111,11 +111,13 @@ class MarketParams(BaseModel):
         return self
 
     def model_post_init(self, __context) -> None:
-        """Validate that max values are greater than min values for legacy params."""
-        if self.max_wtp <= self.min_wtp:
-            raise ValueError("max_wtp must be greater than min_wtp")
-        if self.max_cost <= self.min_cost:
-            raise ValueError("max_cost must be greater than min_cost")
+        # Only validate legacy params if segments aren’t provided
+        if not self.buyer_segments:
+            if self.max_wtp <= self.min_wtp:
+                raise ValueError("max_wtp must be greater than min_wtp")
+        if not self.seller_segments:
+            if self.max_cost <= self.min_cost:
+                raise ValueError("max_cost must be greater than min_cost")
 
 
 class PricePoint(BaseModel):

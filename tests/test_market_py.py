@@ -25,10 +25,10 @@ class TestEquilibrium:
         
         q, p = find_equilibrium(demand, supply)
         
-        # Should match: (10,3), (8,5), (6,7) - 3 trades
-        # Next buyer wants 4, last matched seller cost 7
-        # Price = (4 + 7) / 2 = 5.5
-        assert q == 3
+        # Should match: (10,3), (8,5) - 2 trades
+        # Next buyer wants 6, last matched seller cost 5
+        # Price = (6 + 5) / 2 = 5.5
+        assert q == 2
         assert p == 5.5
 
     def test_no_equilibrium(self):

@@ -11,6 +11,13 @@ __pycache__/
 *.manifest
 *.spec
 
+# -------------------------
+# Environment Variables
+# -------------------------
+.env
+.env.local
+.env.*.local
+
 # Virtual environments
 venv/
 .venv/

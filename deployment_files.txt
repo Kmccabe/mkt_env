@@ -1,0 +1,78 @@
+# File 1: Procfile (create in root directory)
+# This tells Railway how to run your backend
+web: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+
+# File 2: railway.json (create in root directory)
+# Railway configuration
+{
+  "$schema": "https://railway.app/railway.schema.json",
+  "build": {
+    "builder": "NIXPACKS"
+  },
+  "deploy": {
+    "startCommand": "uvicorn backend.main:app --host 0.0.0.0 --port $PORT",
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 10
+  }
+}
+
+# File 3: .env.example (create in root directory)
+# Template for environment variables students can copy
+# Copy this to .env and fill in your values
+API_HOST=0.0.0.0
+API_PORT=8001
+DEBUG=false
+CORS_ORIGINS=["https://yourdomain.vercel.app"]
+
+# File 4: Update backend/config.py for production
+# Add this import at the top
+import os
+
+# Update your Settings class
+class Settings(BaseSettings):
+    # ... your existing settings ...
+    
+    # Production overrides
+    api_host: str = "0.0.0.0"  # Changed for production
+    api_port: int = int(os.getenv("PORT", 8001))  # Railway sets PORT automatically
+    debug: bool = os.getenv("DEBUG", "false").lower() == "true"
+    
+    # CORS - allow your frontend domain
+    cors_origins: list = [
+        "http://localhost:5173",  # Local development
+        "http://127.0.0.1:5173",  # Local development
+        # Students will add their Vercel URL here
+    ]
+    
+    class Config:
+        env_file = ".env"
+        case_sensitive = False
+
+# File 5: Update frontend/src/api.ts for production
+# Add environment detection
+const API_BASE_URL = import.meta.env.VITE_API_URL || 
+  (import.meta.env.DEV 
+    ? 'http://127.0.0.1:8001'  // Development
+    : 'https://your-railway-app.railway.app'  // Production - students will update this
+  );
+
+export const api = {
+  async generateMarket(params: MarketParams): Promise<MarketResponse> {
+    const response = await fetch(`${API_BASE_URL}/market`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to generate market');
+    }
+    
+    return response.json();
+  },
+  
+  async healthCheck(): Promise<{status: string}> {
+    const response = await fetch(`${API_BASE_URL}/health`);
+    return response.json();
+  },
+};

@@ -130,10 +130,14 @@ export function Controls({ params, onParamsChange, onGenerate, loading }: Contro
       seller_segments: sellerSegs.map(toPayloadSegment),
       seed: seedStr === '' ? null : Number(seedStr),
     };
+    
     // filter invalid segments NOW (not during typing)
-    payload.buyer_segments = payload.buyer_segments.filter(s => s.p_min <= s.p_max);
-    payload.seller_segments = payload.seller_segments.filter(s => s.p_min <= s.p_max);
-
+    if (payload.buyer_segments) {
+      payload.buyer_segments = payload.buyer_segments.filter(s => s.p_min <= s.p_max);
+    }
+    if (payload.seller_segments) {
+      payload.seller_segments = payload.seller_segments.filter(s => s.p_min <= s.p_max);
+    }
     onParamsChange(payload);
     onGenerate();
   };

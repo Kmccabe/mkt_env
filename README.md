@@ -413,4 +413,4 @@ This project is licensed under the [MIT License](LICENSE).
    - Try a simple market simulation
    - Explore the segmented market features!
 
-Happy simulating! 🚀
+Happy Building! 🚀
